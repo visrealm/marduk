@@ -1,22 +1,12 @@
 /*
- * Copyright (c) 2021 Troy Schrapel.
+ * Troy's TMS9918 Emulator - Core interface
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following condition:  The
- * above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
- * DEALINGS IN THE SOFTWARE.
+ * Copyright (c) 2021 Troy Schrapel
+ *
+ * This code is licensed under the MIT license
+ *
+ * https://github.com/visrealm/vrEmuTms9918
+ *
  */
 
 #ifndef _VR_EMU_TMS9918_H_
@@ -29,6 +19,31 @@
  * VR_6502_EMU_COMPILING_DLL:    When compiling vrEmuTms9918 as a DLL
  * VR_6502_EMU_STATIC:           When linking vrEmu6502 statically in your executable
  */
+#define VR_EMU_TMS9918_STATIC 1
+#if __EMSCRIPTEN__
+#include <emscripten.h>
+  #ifdef __cplusplus
+  #define VR_EMU_TMS9918_DLLEXPORT EMSCRIPTEN_KEEPALIVE extern "C"
+  #define VR_EMU_TMS9918_DLLEXPORT_CONST extern "C"
+#else
+  #define VR_EMU_TMS9918_DLLEXPORT EMSCRIPTEN_KEEPALIVE extern
+  #define VR_EMU_TMS9918_DLLEXPORT_CONST extern
+#endif
+#elif VR_TMS9918_EMU_COMPILING_DLL
+#define VR_EMU_TMS9918_DLLEXPORT __declspec(dllexport)
+#elif defined WIN32 && !defined VR_EMU_TMS9918_STATIC
+#define VR_EMU_TMS9918_DLLEXPORT __declspec(dllimport)
+#else
+#ifdef __cplusplus
+#define VR_EMU_TMS9918_DLLEXPORT extern "C"
+#else
+#define VR_EMU_TMS9918_DLLEXPORT extern
+#endif
+#endif
+
+#ifndef VR_EMU_TMS9918_DLLEXPORT_CONST
+#define VR_EMU_TMS9918_DLLEXPORT_CONST VR_EMU_TMS9918_DLLEXPORT
+#endif
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -96,14 +111,14 @@ typedef enum
   * --------------------
   * create a new TMS9918
   */
-
-VrEmuTms9918* vrEmuTms9918New();
+VR_EMU_TMS9918_DLLEXPORT
+VrEmuTms9918* vrEmuTms9918New(void);
 
 /* Function:  vrEmuTms9918Reset
   * --------------------
   * reset the new TMS9918
   */
-
+VR_EMU_TMS9918_DLLEXPORT
 void vrEmuTms9918Reset(VrEmuTms9918* tms9918);
 
 /* Function:  vrEmuTms9918Destroy
@@ -112,7 +127,7 @@ void vrEmuTms9918Reset(VrEmuTms9918* tms9918);
  *
  * tms9918: tms9918 object to destroy / clean up
  */
-
+VR_EMU_TMS9918_DLLEXPORT
 void vrEmuTms9918Destroy(VrEmuTms9918* tms9918);
 
 /* Function:  vrEmuTms9918WriteAddr
@@ -121,7 +136,7 @@ void vrEmuTms9918Destroy(VrEmuTms9918* tms9918);
  *
  * uint8_t: the data (DB0 -> DB7) to send
  */
-
+VR_EMU_TMS9918_DLLEXPORT
 void vrEmuTms9918WriteAddr(VrEmuTms9918* tms9918, uint8_t data);
 
 /* Function:  vrEmuTms9918WriteData
@@ -130,21 +145,21 @@ void vrEmuTms9918WriteAddr(VrEmuTms9918* tms9918, uint8_t data);
  *
  * uint8_t: the data (DB0 -> DB7) to send
  */
-
+VR_EMU_TMS9918_DLLEXPORT
 void vrEmuTms9918WriteData(VrEmuTms9918* tms9918, uint8_t data);
 
 /* Function:  vrEmuTms9918ReadStatus
  * --------------------
  * read from the status register
  */
-
+VR_EMU_TMS9918_DLLEXPORT
 uint8_t vrEmuTms9918ReadStatus(VrEmuTms9918* tms9918);
 
 /* Function:  vrEmuTms9918ReadData
  * --------------------
  * read data (mode = 0) from the tms9918
  */
-
+VR_EMU_TMS9918_DLLEXPORT
 uint8_t vrEmuTms9918ReadData(VrEmuTms9918* tms9918);
 
 /* Function:  vrEmuTms9918ReadDataNoInc
@@ -152,7 +167,7 @@ uint8_t vrEmuTms9918ReadData(VrEmuTms9918* tms9918);
  * read data (mode = 0) from the tms9918
  * don't increment the address pointer
  */
-
+VR_EMU_TMS9918_DLLEXPORT
 uint8_t vrEmuTms9918ReadDataNoInc(VrEmuTms9918* tms9918);
 
 
@@ -162,21 +177,21 @@ uint8_t vrEmuTms9918ReadDataNoInc(VrEmuTms9918* tms9918);
  *
  * pixels to be filled with TMS9918 color palette indexes (vrEmuTms9918Color)
  */
-
+VR_EMU_TMS9918_DLLEXPORT
 void vrEmuTms9918ScanLine(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X]);
 
 /* Function:  vrEmuTms9918RegValue
  * ----------------------------------------
  * return a reigister value
  */
-
+VR_EMU_TMS9918_DLLEXPORT
 uint8_t vrEmuTms9918RegValue(VrEmuTms9918* tms9918, vrEmuTms9918Register reg);
 
 /* Function:  vrEmuTms9918WriteRegValue
  * ----------------------------------------
  * write a reigister value
  */
-
+VR_EMU_TMS9918_DLLEXPORT
 void vrEmuTms9918WriteRegValue(VrEmuTms9918* tms9918, vrEmuTms9918Register reg, uint8_t value);
 
 
@@ -184,7 +199,7 @@ void vrEmuTms9918WriteRegValue(VrEmuTms9918* tms9918, vrEmuTms9918Register reg, 
  * ----------------------------------------
  * return a value from vram
  */
-
+VR_EMU_TMS9918_DLLEXPORT
 uint8_t vrEmuTms9918VramValue(VrEmuTms9918* tms9918, uint16_t addr);
 
 
@@ -192,8 +207,16 @@ uint8_t vrEmuTms9918VramValue(VrEmuTms9918* tms9918, uint16_t addr);
   * --------------------
   * check BLANK flag
   */
-
+VR_EMU_TMS9918_DLLEXPORT
 bool vrEmuTms9918DisplayEnabled(VrEmuTms9918* tms9918);
+
+
+/* Function:  vrEmuTms9918DisplayMode
+  * --------------------
+  * current display mode
+  */
+VR_EMU_TMS9918_DLLEXPORT
+vrEmuTms9918Mode vrEmuTms9918DisplayMode(VrEmuTms9918* tms9918);
 
 
 #endif // _VR_EMU_TMS9918_H_
