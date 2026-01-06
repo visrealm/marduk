@@ -36,7 +36,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
 #ifdef _WIN32
 # include <winsock2.h>
@@ -62,8 +64,13 @@
  * reimplemented within Marduk itself.
  */
 
-static int status;
+#ifdef _WIN32
+static SOCKET mosock;
+static int wsa_started;
+#else
 static int mosock;
+#endif
+static int status;
 
 uint8_t modem_bytes_available (void)
 {
@@ -116,6 +123,7 @@ int modem_init (char *server, char *port)
  
 #ifdef _WIN32
  WSADATA wsadata;
+ wsa_started=0;
 #endif
  
  status=0;
@@ -147,6 +155,7 @@ int modem_init (char *server, char *port)
   fprintf (stderr, "TCP library failed to initialize\n");
   return -1;
  }
+ wsa_started=1;
 #endif
  
  memset(&hints,0,sizeof(struct addrinfo));
@@ -170,6 +179,9 @@ int modem_init (char *server, char *port)
  {
   perror ("Could not get a socket");
   freeaddrinfo(result);
+#ifdef _WIN32
+  if (wsa_started) WSACleanup();
+#endif
   return -1;
  }
  
@@ -178,6 +190,10 @@ int modem_init (char *server, char *port)
  if (e==-1)
  {
   perror ("Connection to virtual modem failed");
+  closesocket(mosock);
+#ifdef _WIN32
+  if (wsa_started) WSACleanup();
+#endif
   return -1;
  }
  printf ("Connection to virtual modem succeeded\n");
@@ -192,6 +208,6 @@ void modem_deinit (void)
  printf ("Shutting down virtual modem.\n");
  closesocket(mosock);
 #ifdef _WIN32
- WSACleanup();
+ if (wsa_started) WSACleanup();
 #endif
 }

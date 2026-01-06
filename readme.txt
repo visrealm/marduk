@@ -89,3 +89,26 @@ License
   than that though.
 
   (Note that SDL uses a different license, but with the same goals.)
+
+Building with CMake
+===================
+
+  Requirements:
+    * CMake 3.16 or newer
+    * (optional) Preinstalled SDL2 development files; if missing, CMake can
+      download and build SDL2 automatically
+    * Gtk+ 3 development files on Linux (not needed on Windows or macOS)
+    * A C99 toolchain; on Windows you can use either Visual Studio or MinGW
+
+  Configure and build:
+    cmake -S . -B build
+    cmake --build build
+
+  Tips:
+    * With Visual Studio generators, choose an architecture (for example,
+      cmake -S . -B build -A x64).
+    * With MinGW, pass -G "MinGW Makefiles" when configuring.
+    * By default CMake will download SDL2 (FetchContent). To force using a
+      preinstalled SDL2, configure with -DMARDUK_FETCH_SDL2=OFF.
+    * If SDL2 or Gtk+ are installed in a non-default location, point CMake to
+      them using SDL2_DIR and/or PKG_CONFIG_PATH.
