@@ -2,3 +2,5 @@
 *.o
 marduk
 !opennabu.bin
+build/
+build*/
