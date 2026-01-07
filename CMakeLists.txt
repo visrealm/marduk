@@ -43,6 +43,8 @@ if(TARGET SDL2::SDL2)
         target_link_libraries(marduk PRIVATE SDL2::SDL2main)
     endif()
     target_link_libraries(marduk PRIVATE SDL2::SDL2)
+    # Ensure SDL2 runtime is installed for artifact packaging.
+    install(FILES $<TARGET_FILE:SDL2::SDL2> DESTINATION .)
     if(WIN32 AND MARDUK_FETCH_SDL2)
         add_custom_command(TARGET marduk POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -80,4 +82,14 @@ endif()
 
 if(NOT WIN32)
     target_link_libraries(marduk PRIVATE m)
+endif()
+
+# Install outputs for CI artifacts.
+install(TARGETS marduk RUNTIME DESTINATION . BUNDLE DESTINATION . LIBRARY DESTINATION .)
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/opennabu.bin)
+    install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/opennabu.bin DESTINATION .)
+endif()
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/license.txt DESTINATION .)
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/README.md)
+    install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/README.md DESTINATION .)
 endif()
