@@ -38,10 +38,11 @@ else()
 endif()
 
 if(TARGET SDL2::SDL2)
-    target_link_libraries(marduk PRIVATE SDL2::SDL2)
+    # Link SDL2main before SDL2 to satisfy MinGW/ld symbol resolution order.
     if(TARGET SDL2::SDL2main)
         target_link_libraries(marduk PRIVATE SDL2::SDL2main)
     endif()
+    target_link_libraries(marduk PRIVATE SDL2::SDL2)
     if(WIN32 AND MARDUK_FETCH_SDL2)
         add_custom_command(TARGET marduk POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
