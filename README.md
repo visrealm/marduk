@@ -6,7 +6,7 @@ Marduk is an emulator for the NABU Personal Computer. CPU, VDP, and PSG cores ar
 
 | Windows | Linux | macOS |
 |---------|-------|-------|
-| ![Windows CI](https://github.com/${OWNER}/${REPO}/actions/workflows/ci-windows.yml/badge.svg) | ![Linux CI](https://github.com/${OWNER}/${REPO}/actions/workflows/ci-linux.yml/badge.svg) | ![macOS CI](https://github.com/${OWNER}/${REPO}/actions/workflows/ci-macos.yml/badge.svg) |
+| ![Windows CI](https://github.com/visrealm/marduk/actions/workflows/ci-windows.yml/badge.svg) | ![Linux CI](https://github.com/visrealm/marduk/actions/workflows/ci-linux.yml/badge.svg) | ![macOS CI](https://github.com/visrealm/marduk/actions/workflows/ci-macos.yml/badge.svg) |
 
 ## ROM Files
 
