@@ -1,0 +1,11 @@
+name: CI macOS
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-macos:
+    uses: ./.github/workflows/ci.yml
+    with:
+      runs-on: macos-latest

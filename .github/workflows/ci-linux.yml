@@ -1,0 +1,11 @@
+name: CI Linux
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-linux:
+    uses: ./.github/workflows/ci.yml
+    with:
+      runs-on: ubuntu-latest

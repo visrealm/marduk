@@ -1,0 +1,11 @@
+name: CI Windows
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-windows:
+    uses: ./.github/workflows/ci.yml
+    with:
+      runs-on: windows-latest
