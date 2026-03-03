@@ -1268,7 +1268,7 @@ void render_scanline(int line)
    * The border is 64 pels left and right, 48 top and bottom, thus 512x384 in a
    * 640x480 window.
    *
-   * The palette is stored RGBA, but we use ARGB; accomodate it.
+   * The palette is stored RGBA, but we use ARGB; accommodate it.
    */
   bg = 0xFF000000 | (vrEmuTms9918Palette[vrEmuTms9918RegValue(vdp, 7) & 0x0F] >> 8);
   for (x = 0; x < 320; x++)
@@ -1872,7 +1872,7 @@ int main(int argc, char **argv)
   /*
    * Get SDL2 up and running.
    *
-   * First, initalize the library.  Then create our window, renderer, blit
+   * First, initialize the library.  Then create our window, renderer, blit
    * surface, and allocate memory for our offscreen buffer.
    *
    * If any of this fails, die screaming.
