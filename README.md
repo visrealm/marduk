@@ -52,6 +52,21 @@ Place the desired ROM alongside the executable or use flags:
 - Custom ROM: `marduk -B mygame.bin`.
 - Other options: `-4`, `-8`, `-V <chip>` (VDP, see below), `-9`, `-S <server>`, `-P <port>`, `-p <lptfile>`, `-a <diskA>`, `-b <diskB>`, `-x <cpm exec>`, `-j/-J` to toggle joystick routing.
 
+## Display
+
+The frame is 640x480 whatever the window is, and the options below say how it gets
+there. The DOS build renders straight to VGA memory and reports them as ignored.
+
+| Option | Effect |
+|--------|--------|
+| `-r` *(default)* | Resizable window, opened at the largest whole multiple of the frame that fits the display, up to 2x. |
+| `-R` | Fixed window. |
+| `-i` *(default)* | Whole scaling factors only, so pixel and scanline thickness stay even. Between two factors the picture keeps the smaller one and the surplus becomes border. |
+| `-I` | Any factor: the picture fills the window's 4:3 box. Aspect is still kept - the odd dimension out becomes border, never stretch. |
+| `-s` | Filter the scaling. Off by default; at a fractional factor it trades the hard pixel edges for a softer picture, and at a whole one it softens them for nothing. |
+
+`F11` toggles fullscreen at any time.
+
 ## VDP selection
 
 pico9918-core renders the VDP, and `-V` picks which chip it answers as. These form
