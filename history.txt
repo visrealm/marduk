@@ -1,3 +1,25 @@
+0.27 (26090223)
+================
+
+  * pico9918-core now drives the whole output frame through
+    pico9918_frame_output_line: vertical scaling, double rows, the overlay on
+    border lines and the CRT-scanlines dim are all the library's, and the host
+    presents a fixed 480 lines in every mode.
+  * CRT scanlines take effect.  The setting was stored in the configuration
+    block before but never applied, so a block with it set now dims every
+    second line where it previously did nothing.
+  * 80-column text renders at full width and in the right colours.  The line is
+    a byte a pixel once unlocked, and both its width and its palette lookup
+    were wrong for that.
+  * F18A and PICO9918 detection is reliable.  A GPU program now runs from the
+    register write that arms it rather than at the next scanline, so a probe
+    that writes a short self-modifying program and reads the result straight
+    back cannot miss it.  It failed at random before.
+  * MARDUK_GPU_IPS sets the rate the library paces the GPU at, rather than a
+    per-scanline instruction budget here.
+  * One pixel format throughout: the library renders a 16-bit pixel and marduk
+    converts to ARGB8888 on the way to the texture.
+
 0.26f (26090216)
 ================
 

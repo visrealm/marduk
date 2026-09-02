@@ -1,7 +1,7 @@
 # 3.22 is pico9918-core's floor, and add_subdirectory() enforces it here.
 cmake_minimum_required(VERSION 3.22)
 
-project(marduk VERSION 0.26 LANGUAGES C)
+project(marduk VERSION 0.27 LANGUAGES C)
 
 # C11: pico9918-core's public headers use _Static_assert.
 set(CMAKE_C_STANDARD 11)
@@ -48,18 +48,6 @@ set(PICO9918_RUNTIME_CHIP ON)
 set(PICO9918_PORTABLE_CODEGEN ON)
 
 add_subdirectory(${MARDUK_PICO9918_SRC} ${CMAKE_CURRENT_BINARY_DIR}/pico9918-core)
-
-# Marduk's pixel policy, force-included ahead of the library's own #ifndef-guarded
-# desktop defaults, to pin 32-bit ARGB. See pico9918_pixel_policy.h.
-set(MARDUK_PICO9918_POLICY ${CMAKE_CURRENT_SOURCE_DIR}/pico9918_pixel_policy.h)
-if(MSVC)
-    target_compile_options(pico9918_core PRIVATE /FI${MARDUK_PICO9918_POLICY})
-else()
-    target_compile_options(pico9918_core PRIVATE -include ${MARDUK_PICO9918_POLICY})
-endif()
-
-# A force-include is not a tracked dependency, so name it as one.
-set_property(TARGET pico9918_core APPEND PROPERTY SOURCES ${MARDUK_PICO9918_POLICY})
 
 # The library's version for the config block's stamp, read back out of the
 # subproject's directory scope, where its project() set it.
