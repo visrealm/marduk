@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
@@ -29,8 +31,22 @@ jobs:
           brew update
           brew install ninja pkg-config
 
+      # pico9918-core generates its overlay image arrays at configure time.
+      - name: Python for the overlay assets
+        id: python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install pillow
+        run: python -m pip install --upgrade pillow
+
+      # Python3_EXECUTABLE is pinned because CMake searches the registry before PATH
+      # on Windows and can pick an interpreter pillow was not installed into.
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        run: >
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          -DPython3_EXECUTABLE="${{ steps.python.outputs.python-path }}"
 
       - name: Build
         run: cmake --build build --config Release
