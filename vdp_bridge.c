@@ -26,17 +26,13 @@
 #define VDP_H_VIRTUAL 640u
 #define VDP_V_OUTPUT  480u
 
-/* The library lays out entries, not pixels - on the board a pixel is 16 bits and a
-   line moves as 320 32-bit words - so at 32 bits its offsets are half-width. */
-#define VDP_H_ACTIVE    512u
-#define VDP_H_BORDER    ((VDP_H_VIRTUAL - VDP_H_ACTIVE) / 2u)
-#define VDP_H_SRC_START ((VDP_H_VIRTUAL / 2u - VDP_H_ACTIVE / 2u) / 2u)
+/* No horizontal geometry of our own: the library lays a line out in 32-bit words holding
+   two 16-bit pixels, which is the one pixel width it ships.  So its own numbers
+   land finished - 320 words, 640 pixels, the picture at 64..575 with 64 of border each
+   side - and there is nothing to halve, re-derive or stretch afterwards. */
 
 /* A fine-h-scrolled tile layer's last quad can reach past the line. */
 #define VDP_LINE_SLACK 16u
-
-/* The rate F18A GPU software is written against: a TMS9900 core at 100MHz. */
-#define VDP_GPU_DEFAULT_IPS 10000000ul
 
 /* First config byte the device may write back; 0-7 are identity. */
 #define VDP_CONFIG_SETTABLE 8
@@ -62,11 +58,12 @@ static pico9918_t *tms9918 = 0;
 
 static int instance_ready = 0;
 
-/* The border pixel the library sets at the top of every frame_scanline().  Its own
-   fill covers only the entries, so the full width is pre-painted here. */
-extern uint32_t pico9918_border_bg;
-
 static uint32_t *offscreen;
+
+/* BGR12 in the low 12 bits is what the library hands back - the board's format - and
+   the SDL texture takes ARGB8888.  One lookup a pixel, in the copy into the offscreen
+   that had to happen anyway. */
+static uint32_t bgr12_argb[4096];
 
 static pico9918_chip_t chip = PICO9918_CHIP_TMS9918A;
 
@@ -80,9 +77,6 @@ static int      config_pending;
 static unsigned int scanlines = 262u;
 static unsigned int line;
 
-/* Instructions per scanline.  Never zero: zero is step_n's "no cap". */
-static uint32_t gpu_budget = VDP_GPU_DEFAULT_IPS / (262ul * 60ul);
-
 static PICO9918_PIXEL_T pixels[VDP_H_VIRTUAL + VDP_LINE_SLACK];
 
 static pico9918_scanline_params_t params;
@@ -93,6 +87,25 @@ static pico9918_frame_geometry_t  geometry;
    double rows.  field_lines includes the porch. */
 static unsigned int lines_per_call = 1u;
 static unsigned int field_lines    = 262u;
+
+/* BGR12 to ARGB8888, through the library's own transform so the nibble order lives in
+   one place.  Indexed by the low 12 bits, the dead copy of green in 15-12 masked off as
+   the library masks it wherever it matters. */
+static void vdp_bridge_init_pixel_map(void)
+{
+  unsigned int v;
+
+  for (v = 0; v < 4096u; ++v)
+    bgr12_argb[v] = 0xff000000u | pico9918_pixel_rgb888((PICO9918_PIXEL_T)v);
+}
+
+static void vdp_bridge_blit_line(uint32_t *dest)
+{
+  unsigned int x;
+
+  for (x = 0; x < VDP_H_VIRTUAL; ++x)
+    dest[x] = bgr12_argb[pixels[x] & 0x0fffu];
+}
 
 static unsigned int vdp_frame_rate(void)
 {
@@ -318,6 +331,7 @@ static int vdp_bridge_ensure(void)
     pico9918_frame_set_config_reload_callback(vdp_bridge_config_reload);
     pico9918_set_chip(PICO9918_INST chip);
     vdp_bridge_configure();
+    vdp_bridge_init_pixel_map();
     instance_ready = 1;
   }
   return 1;
@@ -333,20 +347,17 @@ static int vdp_bridge_ensure(void)
     pico9918_frame_set_config_reload_callback(vdp_bridge_config_reload);
     pico9918_set_chip(PICO9918_INST chip);
     vdp_bridge_configure();
+    vdp_bridge_init_pixel_map();
     instance_ready = 1;
   }
   return 1;
 #endif
 }
 
-/* A scanline's share of the GPU's clock, which is the only unit the host has.
-   MARDUK_GPU_IPS overrides the rate; "off" is a cap too large to pace with, not no
-   cap, because an uncapped step cannot return until the program stops itself. */
-static uint32_t vdp_bridge_gpu_budget(void)
+/* The GPU's clock, which MARDUK_GPU_IPS overrides.  The library paces it from here. */
+static uint32_t vdp_bridge_gpu_ips(void)
 {
-  unsigned long ips = VDP_GPU_DEFAULT_IPS;
-  unsigned long per_second;
-  unsigned long budget;
+  unsigned long ips = PICO9918_GPU_IPS_PRO;
   const char *env = getenv("MARDUK_GPU_IPS");
 
   /* strtoul wraps a negative to ULONG_MAX rather than failing, so reject the sign
@@ -362,14 +373,7 @@ static uint32_t vdp_bridge_gpu_budget(void)
       ips = parsed;
   }
 
-  per_second = (unsigned long)scanlines * vdp_frame_rate();
-  budget = ips / (per_second ? per_second : 1ul);
-
-  if (budget > UINT32_MAX)
-    budget = UINT32_MAX;
-
-  /* A rate too low to divide still means "as slow as possible", not off. */
-  return budget ? (uint32_t)budget : 1u;
+  return (ips > UINT32_MAX) ? UINT32_MAX : (uint32_t)ips;
 }
 
 void vdp_bridge_reset(unsigned int machine_scanlines)
@@ -389,8 +393,10 @@ void vdp_bridge_reset(unsigned int machine_scanlines)
   vdp_bridge_seed();
   vdp_bridge_configure();
 
-  /* Resolved once here rather than per scanline: it reads the environment. */
-  gpu_budget = vdp_bridge_gpu_budget();
+  /* Hands the GPU to the library: it runs a program from the write that arms it, so a
+     detection probe reading its result back cannot miss it, and paces the rest per
+     scanline.  Resolved here rather than per scanline - it reads the environment. */
+  pico9918_gpu_set_clock(PICO9918_INST vdp_bridge_gpu_ips());
 }
 
 void vdp_bridge_shutdown(void)
@@ -417,8 +423,10 @@ void vdp_bridge_writedata(unsigned char value)
 
 void vdp_bridge_writectrl(unsigned char value)
 {
-  if (vdp_bridge_ensure())
-    pico9918_write_addr(PICO9918_INST value);
+  if (!vdp_bridge_ensure())
+    return;
+
+  pico9918_write_addr(PICO9918_INST value);
 }
 
 unsigned char vdp_bridge_readdata(void)
@@ -431,104 +439,34 @@ unsigned char vdp_bridge_readctrl(void)
   return vdp_bridge_ensure() ? pico9918_read_status(PICO9918_INST_ONLY) : 0u;
 }
 
-/* Stretch the library's line to the 640 pixels the board drives: normally 256 TMS
-   pixels doubled, already 512 in 80-column text.  In place and downwards, so every
-   destination is above every source still to be read. */
-static void vdp_bridge_expand_line(void)
-{
-  /* The library sizes the line from mode AND unlock state, so ask it rather than
-     deriving it again from the mode alone. */
-  const unsigned int wide = (pico9918_line_bytes(PICO9918_INST_ONLY) != TMS9918_PIXELS_X);
-  const unsigned int count = wide ? VDP_H_ACTIVE : (VDP_H_ACTIVE / 2u);
-  const unsigned int scale = wide ? 1u : 2u;
-  unsigned int i, x;
-
-  for (i = count; i-- > 0; )
-  {
-    const PICO9918_PIXEL_T v = pixels[VDP_H_SRC_START + i];
-    unsigned int r;
-
-    for (r = 0; r < scale; ++r)
-      pixels[VDP_H_BORDER + i * scale + r] = v;
-  }
-
-  for (x = 0; x < VDP_H_BORDER; ++x)
-  {
-    pixels[x] = pico9918_border_bg;
-    pixels[VDP_H_BORDER + VDP_H_ACTIVE + x] = pico9918_border_bg;
-  }
-}
-
-/* Two of the library's diagnostics paths still emit BGR12; alpha tells them apart,
-   because our policy always sets it. */
-static void vdp_bridge_diag_recolour(void)
-{
-  unsigned int x;
-
-  for (x = 0; x < VDP_H_VIRTUAL; ++x)
-  {
-    const uint32_t p = (uint32_t)pixels[x];
-
-    if (p & 0xff000000u)
-      continue;
-
-    pixels[x] = (PICO9918_PIXEL_T)((((p >> 0) & 0x0fu) * 0x11u) << 16 |
-                                   (((p >> 4) & 0x0fu) * 0x11u) <<  8 |
-                                   (((p >> 8) & 0x0fu) * 0x11u)       |
-                                   0xff000000u);
-  }
-}
-
 /* One virtual (VGA) line, written out vPixelScale times. */
 static void vdp_bridge_virtual_line(void)
 {
   if (line < params.vVirtualPixels)
   {
-    unsigned int x, scale, rep;
-    uint8_t diag_wanted = 0;
-    bool border;
-
-    for (x = 0; x < VDP_H_VIRTUAL; ++x)
-      pixels[x] = pico9918_border_bg;
-
-    /* The overlay draws at full width into a half-width line, so it is held back
-       until after the expansion below. */
-    if (device_config)
-    {
-      diag_wanted = device_config[PICO9918_CONF_DIAG];
-      device_config[PICO9918_CONF_DIAG] = 0;
-    }
+    unsigned int scale, rep;
 
     /* Through the frame module, not the bare scan_line(): SR3, the GPU trigger, the
-       palette LUT and the overlays all live in there. */
-    border = pico9918_frame_scanline(PICO9918_INST (uint16_t)line, &params, pixels);
-
-    if (device_config)
-    {
-      /* The border path can turn the diagnostics on itself. */
-      if (device_config[PICO9918_CONF_DIAG])
-        diag_wanted = device_config[PICO9918_CONF_DIAG];
-      device_config[PICO9918_CONF_DIAG] = diag_wanted;
-    }
-
-    if (!border)
-      vdp_bridge_expand_line();
-
-    /* On border lines too: the panels span the frame, and the frame module renders
-       them on active lines only. */
-    if (diag_wanted)
-    {
-      pico9918_diag_render(PICO9918_INST (uint16_t)line, params.vVirtualPixels, pixels);
-      vdp_bridge_diag_recolour();
-    }
-
+       palette LUT, the overlays and the CRT dim all live in there.  It fills the whole
+       320-word line - both borders and the picture - so there is nothing left to paint,
+       and it renders once per virtual line however many output rows share it. */
     scale = display_cfg.vPixelScale ? display_cfg.vPixelScale : 1u;
     for (rep = 0; rep < scale; ++rep)
     {
       const unsigned int dy = line * scale + rep;
 
-      if (offscreen && dy < VDP_V_OUTPUT)
-        memcpy(&offscreen[dy * VDP_H_VIRTUAL], pixels,
+      if (dy >= VDP_V_OUTPUT)
+        continue;
+
+      /* False means the buffer is untouched, so this row is still the last one's. */
+      if (pico9918_frame_output_line(PICO9918_INST dy, &params, pixels))
+      {
+        if (offscreen)
+          vdp_bridge_blit_line(&offscreen[dy * VDP_H_VIRTUAL]);
+      }
+      else if (offscreen)
+        memcpy(&offscreen[dy * VDP_H_VIRTUAL],
+               &offscreen[(dy - 1u) * VDP_H_VIRTUAL],
                VDP_H_VIRTUAL * sizeof(uint32_t));
     }
 
@@ -564,11 +502,6 @@ int vdp_bridge_loop(void)
   calls = lines_per_call;
   for (i = 0; i < calls; ++i)
     vdp_bridge_virtual_line();
-
-  /* Capped so it always comes back: the caller that would satisfy a program waiting
-     on the Z80 is the one blocked inside it. */
-  if (pico9918_chip(PICO9918_INST_ONLY) >= PICO9918_CHIP_F18A)
-    pico9918_gpu_step_n(PICO9918_INST gpu_budget);
 
   return pico9918_interrupt_status(PICO9918_INST_ONLY) ? 1 : 0;
 }

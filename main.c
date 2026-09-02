@@ -26,7 +26,7 @@
  *       similar license terms.
  */
 
-#define VERSION "0.26f"
+#define VERSION "0.27"
 
 /* C99 includes */
 #include <errno.h>
