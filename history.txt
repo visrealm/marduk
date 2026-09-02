@@ -1,3 +1,16 @@
+0.26f (26090216)
+================
+
+  * VDP is now rendered by pico9918-core, the only VDP in non-DOS builds.
+  * Added -V <chip> to select the VDP personality at runtime: tms9918a
+    (default), f18a or pico9918.  -9 is shorthand for -V pico9918.
+    MARDUK_VDP_CHIP sets the same thing from the environment.
+  * At pico9918, the 256-byte configuration block is persisted to
+    pico9918.cfg in the working directory.
+  * MARDUK_GPU_IPS sets the emulated GPU instruction rate (default
+    10000000).
+  * The MS-DOS build keeps vrEmuTms9918 and remains TMS9918A-only.
+
 0.26e (23051218)
 ================
 
