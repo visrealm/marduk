@@ -19,6 +19,10 @@
     per-scanline instruction budget here.
   * One pixel format throughout: the library renders a 16-bit pixel and marduk
     converts to ARGB8888 on the way to the texture.
+  * The window is resizable, and opens at the largest whole multiple of the
+    frame that fits the display.  -R keeps it fixed, -I allows any scaling
+    factor rather than whole ones, -s filters the scaling, and F11 toggles
+    fullscreen.
 
 0.26f (26090216)
 ================
