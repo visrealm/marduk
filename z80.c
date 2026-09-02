@@ -258,7 +258,7 @@ static inline uint8_t addb(z80* const z, uint8_t a, uint8_t b, bool cy) {
   return result;
 }
 
-/* SUBstract Byte: substracts two bytes (with optional carry) */
+/* SUBtract Byte: subtracts two bytes (with optional carry) */
 static inline uint8_t subb(z80* const z, uint8_t a, uint8_t b, bool cy) {
   uint8_t val = addb(z, a, ~b, !cy);
   z->cf = !z->cf;
@@ -278,7 +278,7 @@ static inline uint16_t addw(z80* const z, uint16_t a, uint16_t b, bool cy) {
   return result;
 }
 
-/* SUBstract Word: substracts two words (with optional carry) */
+/* SUBtract Word: subtracts two words (with optional carry) */
 static inline uint16_t subw(z80* const z, uint16_t a, uint16_t b, bool cy) {
   uint8_t lsb = subb(z, a, b, cy);
   uint8_t msb = subb(z, a >> 8, b >> 8, z->cf);
@@ -321,7 +321,7 @@ static inline void adchl(z80* const z, uint16_t val) {
   set_hl(z, result);
 }
 
-/* substracts a word (+ carry) to HL */
+/* subtracts a word (+ carry) to HL */
 static inline void sbchl(z80* const z, uint16_t val) {
   const uint16_t result = subw(z, get_hl(z), val, z->cf);
   z->sf = result >> 15;
@@ -397,7 +397,7 @@ static inline void cp(z80* const z, const uint8_t val) {
   subb(z, z->a, val, 0);
 
   /* the only difference between cp and sub is that */
-  /* the xf/yf are taken from the value to be substracted, */
+  /* the xf/yf are taken from the value to be subtracted, */
   /* not the result */
   z->yf = GET_BIT(5, val);
   z->xf = GET_BIT(3, val);
@@ -642,8 +642,8 @@ static void daa(z80* const z) {
     z->cf = 1;
   }
 
-  const bool substraction = z->nf;
-  if (substraction) {
+  const bool subtraction = z->nf;
+  if (subtraction) {
     z->hf = z->hf && (z->a & 0x0F) < 0x06;
     z->a -= correction;
   } else {
