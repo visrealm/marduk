@@ -1220,6 +1220,10 @@ void keyboard_poll(void)
          clock_gettime(CLOCK_REALTIME, &timespec);
          next_fire = timespec.tv_nsec + FIRE_TICK;
 #endif
+         /* The reset line reaches the whole bus, so the VDP goes with the CPU -
+            otherwise the machine reboots into whatever the last program left in
+            the registers, VRAM and the GPU. */
+         vdp_reset();
          reinit_cpu();
          break;
         case SDLK_F4: /* Alt-F4 - exit */
