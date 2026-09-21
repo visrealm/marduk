@@ -36,7 +36,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
 #ifdef _WIN32
 # include <winsock2.h>

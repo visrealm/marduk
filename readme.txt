@@ -42,6 +42,19 @@ Status
   The modem emulation is reasonably complete.  There is not, at date, floppy
   disk emulation, but it is being developed.
 
+Building
+========
+
+  Everything but the MS-DOS target builds with CMake 3.16 or newer.  Gtk+ 3 is
+  needed on Linux.  SDL2 is fetched and built unless you pass
+  -DMARDUK_FETCH_SDL2=OFF to use one already installed.
+
+    cmake -S . -B build
+    cmake --build build
+
+  The Makefile still works where it always did, and Makefile.dos still builds
+  the MS-DOS target, which does not use CMake.
+
 Key bindings
 ============
 

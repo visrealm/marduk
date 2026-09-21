@@ -36,7 +36,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
 /*
  * MS-DOS (DJGPP):
@@ -64,6 +66,79 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#ifndef PATH_MAX
+#define PATH_MAX MAX_PATH
+#endif
+
+/* Minimal getopt replacement, since <unistd.h> is skipped on Windows. */
+int optind = 1;
+char *optarg;
+
+int getopt(int argc, char *argv[], const char *optstring)
+{
+  static int optpos = 1;
+  const char *optchr;
+  char opt;
+
+  if (optind >= argc)
+    return -1;
+
+  if (argv[optind][0] != '-' || argv[optind][1] == '\0')
+    return -1;
+
+  if (strcmp(argv[optind], "--") == 0)
+  {
+    optind++;
+    return -1;
+  }
+
+  opt = argv[optind][optpos];
+  optchr = (opt == ':') ? NULL : strchr(optstring, opt);
+  if (!optchr)
+  {
+    if (argv[optind][++optpos] == '\0')
+    {
+      optind++;
+      optpos = 1;
+    }
+    return '?';
+  }
+
+  if (optchr[1] == ':')
+  {
+    if (argv[optind][optpos + 1] != '\0')
+    {
+      optarg = &argv[optind][optpos + 1];
+    }
+    else if (optind + 1 < argc)
+    {
+      optind++;
+      optarg = argv[optind];
+    }
+    else
+    {
+      if (argv[optind][++optpos] == '\0')
+      {
+        optind++;
+        optpos = 1;
+      }
+      return '?';
+    }
+    optind++;
+    optpos = 1;
+  }
+  else
+  {
+    if (argv[optind][++optpos] == '\0')
+    {
+      optind++;
+      optpos = 1;
+    }
+    optarg = NULL;
+  }
+
+  return opt;
+}
 #endif
 
 /* Chipset includes */
