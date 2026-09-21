@@ -1856,6 +1856,30 @@ top:
 #endif
 }
 
+#ifndef __MSDOS__
+static const char *base_name (char *path)
+{
+ char *p;
+
+ for (p=path+strlen(path); p>path; p--)
+  if ((p[-1]=='/')||(p[-1]=='\\')) return p;
+
+ return path;
+}
+
+/* What was chosen at startup; none of it changes while we run. */
+static void set_window_title (char *bios, char *diska, char *diskb)
+{
+ char title[256];
+
+ snprintf (title, sizeof(title), "Marduk " VERSION " - %s - %s%s%s%s%s",
+           vdp_chip_name(vdp_chip), base_name(bios),
+           diska?" - A: ":"", diska?base_name(diska):"",
+           diskb?" - B: ":"", diskb?base_name(diskb):"");
+ SDL_SetWindowTitle (screen, title);
+}
+#endif
+
 int main(int argc, char **argv)
 {
   int e;
@@ -2137,6 +2161,8 @@ int main(int argc, char **argv)
   /* What it answers as, not what was asked: a request it cannot honour is clamped. */
   vdp_chip = vdp_bridge_chip();
   printf("VDP: %s (pico9918-core)\n", vdp_chip_name(vdp_chip));
+
+  set_window_title(bios, inita, initb);
 #endif
 
   vdp_reset();
