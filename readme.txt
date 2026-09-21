@@ -34,10 +34,11 @@ How did this become a thing?
 Status
 ======
 
-  The CPU, VDP and PSG are emulated via third-party code, which I have
-  imported with minimal adaptation.  Also, libsdl2 is used for the front end
-  I/O code.  Gtk+ is used for dialog boxes (except on Windows where the native
-  API is used instead).
+  The CPU and PSG are emulated via third-party code, which I have imported
+  with minimal adaptation.  The VDP comes from pico9918-core, which is built
+  from a submodule rather than imported.  Also, libsdl2 is used for the front
+  end I/O code.  Gtk+ is used for dialog boxes (except on Windows where the
+  native API is used instead).
   
   The modem emulation is reasonably complete.  There is not, at date, floppy
   disk emulation, but it is being developed.
@@ -45,15 +46,18 @@ Status
 Building
 ========
 
-  Everything but the MS-DOS target builds with CMake 3.16 or newer.  Gtk+ 3 is
-  needed on Linux.  SDL2 is fetched and built unless you pass
-  -DMARDUK_FETCH_SDL2=OFF to use one already installed.
+  Everything but the MS-DOS target builds with CMake 3.22 or newer, and needs
+  a C11 compiler, Gtk+ 3 on Linux, and Python 3 (pico9918-core generates its
+  overlay image arrays at configure time).  SDL2 is fetched and built unless
+  you pass -DMARDUK_FETCH_SDL2=OFF to use one already installed.
+
+  pico9918-core is a submodule, so clone with --recursive, or run
+  "git submodule update --init --recursive" in an existing clone.
 
     cmake -S . -B build
     cmake --build build
 
-  The Makefile still works where it always did, and Makefile.dos still builds
-  the MS-DOS target, which does not use CMake.
+  Makefile.dos still builds the MS-DOS target, which does not use CMake.
 
 Key bindings
 ============
@@ -82,6 +86,34 @@ ROM Files
     NabuPC-U53-90020060-RevB-2764.bin (-8)
     
   If you have a different firmware you can try it with the -B switch.
+
+Selecting a VDP
+===============
+
+  pico9918-core renders the VDP, and -V picks which chip it answers as.  Each
+  is the one before it plus what the real hardware adds:
+
+    tms9918a     the part the NABU shipped, and the default
+    f18a         unlockable: full register file, enhanced modes and the GPU
+    pico9918     an F18A plus the config port, firmware register and overlays
+    pico9918pro  the RP2350 board, which adds 80-column text at a byte a pixel
+
+  -9 is shorthand for -V pico9918.  MARDUK_VDP_CHIP sets the same thing from
+  the environment, and -V overrides it.  Names are matched without regard to
+  case, and tms, 9918, pico and pro are accepted as short forms.
+
+  Software that probes for an F18A sees exactly what the chip says it is, so a
+  title with an F18A path takes it at f18a and above.
+
+  At pico9918 and above, the 256-byte configuration block a real board keeps
+  in flash is persisted to pico9918.cfg in the working directory.  The two
+  lower chips have no config port, so nothing is written there.
+
+  MARDUK_GPU_IPS sets the emulated GPU's instruction rate (default 10000000).
+  It has no effect at tms9918a, which has no GPU.
+
+  The MS-DOS target keeps vrEmuTms9918 and is a TMS9918A only; -V and -9
+  report that and are otherwise ignored there.
 
 Using a Virtual Adapter (Cable Modem Emulator)
 ==============================================

@@ -35,6 +35,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _MSC_VER
+/* MSVC has no <strings.h>. */
+#define strcasecmp _stricmp
+#elif !defined(__MSDOS__)
+#include <strings.h>
+#endif
 #include <time.h>
 #ifndef _WIN32
 #include <unistd.h>
@@ -142,10 +148,15 @@ int getopt(int argc, char *argv[], const char *optstring)
 #endif
 
 /* Chipset includes */
+#ifdef __MSDOS__
 #include "tms9918.h"
 #include "tms_util.h"
+#endif
 #include "emu2149.h"
 #include "z80.h"
+#ifndef __MSDOS__
+#include "vdp_bridge.h"
+#endif
 
 /* FDC include */
 #include "disk.h"
@@ -202,9 +213,59 @@ int romsize;
  * This means both chips with external cores and internal cores.
  */
 z80 cpu;
+#ifdef __MSDOS__
 VrEmuTms9918 *vdp;
+#endif
 PSG *psg;
 int ctrlreg;
+
+/* The DOS build is a TMS9918A only. */
+#ifndef __MSDOS__
+int vdp_chip = VDP_CHIP_TMS9918A;
+
+static const char *vdp_chip_name(int chip)
+{
+  switch (chip)
+  {
+   case VDP_CHIP_F18A:         return "F18A";
+   case VDP_CHIP_PICO9918:     return "PICO9918";
+   case VDP_CHIP_PICO9918_PRO: return "PICO9918 PRO";
+   default:                    return "TMS9918A";
+  }
+}
+
+/* "tms9918" is the A part here, not the pre-A one the core also models. */
+static int vdp_parse_chip(const char *name, int *out)
+{
+  if (!strcasecmp(name, "tms9918a") || !strcasecmp(name, "tms9918") ||
+      !strcasecmp(name, "tms")      || !strcasecmp(name, "9918"))
+    *out = VDP_CHIP_TMS9918A;
+  else if (!strcasecmp(name, "f18a"))
+    *out = VDP_CHIP_F18A;
+  else if (!strcasecmp(name, "pico9918") || !strcasecmp(name, "pico"))
+    *out = VDP_CHIP_PICO9918;
+  else if (!strcasecmp(name, "pico9918pro") || !strcasecmp(name, "pro"))
+    *out = VDP_CHIP_PICO9918_PRO;
+  else
+    return 0;
+
+  return 1;
+}
+#endif
+
+#ifdef __MSDOS__
+#define vdp_reset()      vrEmuTms9918Reset(vdp)
+#define vdp_writedata(v) vrEmuTms9918WriteData(vdp, v)
+#define vdp_writectrl(v) vrEmuTms9918WriteAddr(vdp, v)
+#define vdp_readdata()   vrEmuTms9918ReadData(vdp)
+#define vdp_readctrl()   vrEmuTms9918ReadStatus(vdp)
+#else
+#define vdp_reset()      vdp_bridge_reset()
+#define vdp_writedata(v) vdp_bridge_writedata(v)
+#define vdp_writectrl(v) vdp_bridge_writectrl(v)
+#define vdp_readdata()   vdp_bridge_readdata()
+#define vdp_readctrl()   vdp_bridge_readctrl()
+#endif
 
 int gotmodem;
 unsigned dog_speed;
@@ -519,9 +580,9 @@ uint8_t port_read(z80 *mycpu, uint8_t port)
   case 0x91: /* Not sure if this is the right action */
     return keyboard_buffer_empty() ? 0x00 : 0xff;
   case 0xA0:
-    return vrEmuTms9918ReadData(vdp);
+    return vdp_readdata();
   case 0xA1: /* Not sure if this is the right action */
-    b = vrEmuTms9918ReadStatus(vdp);
+    b = vdp_readctrl();
     vdpint = 0;
     update_interrupts();
     return b;
@@ -588,10 +649,10 @@ void port_write(z80 *mycpu, uint8_t port, uint8_t val)
     }
     return;
   case 0xA0:
-    vrEmuTms9918WriteData(vdp, val);
+    vdp_writedata(val);
     return;
   case 0xA1:
-    vrEmuTms9918WriteAddr(vdp, val);
+    vdp_writectrl(val);
     return;
   case 0xB0:
     if (lpt) lpt_data=val;
@@ -1109,6 +1170,8 @@ void keyboard_poll(void)
          clock_gettime(CLOCK_REALTIME, &timespec);
          next_fire = timespec.tv_nsec + FIRE_TICK;
 #endif
+         /* The reset line reaches the whole bus, so the VDP goes with the CPU. */
+         vdp_reset();
          reinit_cpu();
          break;
         case SDLK_F4: /* Alt-F4 - exit */
@@ -1325,65 +1388,14 @@ void render_scanline(int line)
   display[63649]=(ctrlreg&0x08)?0x1A:0x10; /* Green LED */
 }
 #else /* The full 640x480 SDL version */
-void render_scanline(int line)
+
+/* Painted over the finished frame: the engine renders these rows too. */
+static void render_leds(void)
 {
+  int line;
   int x;
   int t;
   uint32_t r;
-  uint32_t bg;
-  uint8_t a_scanline[256];
-  uint32_t g_scanline[320];
-  if (line > 239)
-    return;
-
-  /*
-   * To note:
-   *
-   * The background color is register 7, AND 0x0F.
-   * The border is 64 pels left and right, 48 top and bottom, thus 512x384 in a
-   * 640x480 window.
-   *
-   * The palette is stored RGBA, but we use ARGB; accommodate it.
-   */
-  bg = 0xFF000000 | (vrEmuTms9918Palette[vrEmuTms9918RegValue(vdp, 7) & 0x0F] >> 8);
-  for (x = 0; x < 320; x++)
-    g_scanline[x] = bg;
-  if ((line >= 24) && (line < 216))
-  {
-    vrEmuTms9918ScanLine(vdp, line - 24, a_scanline);
-    for (x = 0; x < 256; x++)
-      g_scanline[x + 32] = vrEmuTms9918Palette[a_scanline[x]] >> 8;
-  }
-
-  /* Double-scan. */
-  r = line * 1280;
-  for (x = 0; x < 320; x++)
-  {
-    display[r + (x << 1)] = display[r + 1 + (x << 1)] =
-        display[r + 640 + (x << 1)] = display[r + 641 + (x << 1)] = g_scanline[x];
-  }
-
-  /* Apparently some third-party software flips this bit incorrectly. */
-#ifdef ALLOW_NTSC_NOISE
-  /*
-   * If the display is in "TV" mode, just spew some NTSC noise into the buffer.
-   *
-   * This actually looks pretty realistic (I grew up in the days of aerials and
-   * 3 major TV networks, and am well acquainted with the appearance of NTSC
-   * noise).
-   */
-  if (!(ctrlreg & 0x02))
-  {
-    uint32_t c;
-
-    r = line * 1280;
-    for (x = 0; x < 1280; x++)
-    {
-      c = rand() & 0xFF;
-      display[r + x] = 0xFF000000 | (c << 16) | (c << 8) | (c);
-    }
-  }
-#endif
 
   /*
    * Draw the LEDs.
@@ -1392,9 +1404,9 @@ void render_scanline(int line)
    * they appear on the system unit.  The current code generates a sort of
    * rounded or "chewed-out" rectangle.  Not efficient code.
    */
-  if ((line >= 232) && (line < 236))
+  for (line = 232; line < 236; line++)
   {
-    uint32_t le[3], ri[3];
+    uint32_t le[3] = {0, 0, 0}, ri[3] = {0, 0, 0};
 
     r = line * 1280;
     
@@ -1482,6 +1494,7 @@ void render_scanline(int line)
     }
   }
 }
+
 #endif
 
 /*
@@ -1667,6 +1680,14 @@ void audio_callback(void *userdata, Uint8 *stream, int len)
 {
   int i;
   int16_t sample;
+
+  /* The device outlives the PSG at both ends of the run. */
+  if (!psg)
+  {
+    memset(stream, 0, len);
+    return;
+  }
+
   for (i = 0; i < len; i += 2) {
     sample = PSG_calc(psg);
     stream[i] = sample & 0xff;
@@ -1872,7 +1893,20 @@ int main(int argc, char **argv)
    * You can use actual Nabu firmware with the -4, -8 and -B switches.
    */
   bios = OPENNABU;
-  while (-1 != (e = getopt(argc, argv, "48B:jJS:P:Np:a:b:x:")))
+#ifndef __MSDOS__
+  /* -V overrides this. */
+  {
+    const char *chip = getenv("MARDUK_VDP_CHIP");
+
+    if (chip && !vdp_parse_chip(chip, &vdp_chip))
+    {
+      fprintf(stderr, "%s: MARDUK_VDP_CHIP: unknown chip '%s'\n", argv[0], chip);
+      return 1;
+    }
+  }
+#endif
+
+  while (-1 != (e = getopt(argc, argv, "489B:jJS:P:NV:p:a:b:x:")))
   {
    switch (e)
    {
@@ -1882,6 +1916,26 @@ int main(int argc, char **argv)
     case '8':
       bios = ROMFILE2;
       break;
+    case '9': /* shorthand for -V pico9918 */
+#ifdef __MSDOS__
+     fprintf(stderr, "%s: the DOS build is a TMS9918A only; -9 ignored\n", argv[0]);
+#else
+     vdp_chip = VDP_CHIP_PICO9918;
+#endif
+     break;
+    case 'V':
+#ifdef __MSDOS__
+     fprintf(stderr, "%s: the DOS build is a TMS9918A only; -V ignored\n", argv[0]);
+#else
+     if (!vdp_parse_chip(optarg, &vdp_chip))
+     {
+       fprintf(stderr, "%s: -V: unknown chip '%s' "
+                       "(want tms9918a, f18a, pico9918 or pico9918pro)\n",
+                       argv[0], optarg);
+       return 1;
+     }
+#endif
+     break;
     case 'j':
      dojoy=0;
      break;
@@ -1915,7 +1969,9 @@ int main(int argc, char **argv)
       break;
     default:
       fprintf(stderr, 
-              "usage: %s [-4 | 8 | -B filename] [-S server] [-P port]"
+              "usage: %s [-4 | 8 | -B filename]"
+              " [-V tms9918a|f18a|pico9918|pico9918pro] [-9]"
+              " [-S server] [-P port]"
               " [-p file]\n",
               argv[0]);
       return 1;
@@ -1931,9 +1987,11 @@ int main(int argc, char **argv)
          "  Copyright 2022, 2023 S. V. Nickolas.\n"
          "  Copyright 2023 Marcin Woloszczuk.\n"
          "  Z80 emulation code copyright 2019 Nicolas Allemand.\n"
-         "  Includes vrEmuTms9918 copyright 2021, 2022 Troy Schrapel.\n"
          "  Includes emu2149 copyright 2001-2022 Mitsutaka Okazaki.\n");
-#ifndef __MSDOS__
+#ifdef __MSDOS__
+  printf("  Includes vrEmuTms9918 copyright 2021, 2022 Troy Schrapel.\n");
+#else
+  printf("  Includes pico9918-core copyright 2021-2026 Troy Schrapel.\n");
   printf("  Uses SDL %u.%u.%u.  See documentation for copyright details.\n",
          sdlver.major, sdlver.minor, sdlver.patch);
 #endif
@@ -2053,7 +2111,6 @@ int main(int argc, char **argv)
   audio_spec.callback = audio_callback;
 
   audio_device = SDL_OpenAudioDevice(NULL, 0, &audio_spec, NULL, 0);
-  SDL_PauseAudioDevice(audio_device, 0);
 #endif
 
   /*
@@ -2063,10 +2120,26 @@ int main(int argc, char **argv)
    */
   
   /* Set up the VDP emulation.  If it fails, die screaming. */
+#ifdef __MSDOS__
   vdp = vrEmuTms9918New();
   if (!vdp)
     fatal_diag(3, "FATAL: Could not set up VDP emulation");
-  vrEmuTms9918Reset(vdp);
+
+  printf("VDP: TMS9918A (vrEmuTms9918)\n");
+#else
+  /* Both before the reset, which is where the block is read and pushed in. */
+  vdp_bridge_set_chip(vdp_chip);
+  vdp_bridge_set_framebuffer(display);
+
+  if (!vdp_bridge_init())
+    fatal_diag(3, "FATAL: Could not set up VDP emulation");
+
+  /* What it answers as, not what was asked: a request it cannot honour is clamped. */
+  vdp_chip = vdp_bridge_chip();
+  printf("VDP: %s (pico9918-core)\n", vdp_chip_name(vdp_chip));
+#endif
+
+  vdp_reset();
 
   /* Set up the PSG emulation.  If it fails, die screaming. */
   psg = PSG_new(1789772, 44100);
@@ -2076,6 +2149,11 @@ int main(int argc, char **argv)
   }
   PSG_setVolumeMode(psg, 2);
   PSG_reset(psg);
+
+#ifndef __MSDOS__
+  /* Not at SDL_OpenAudioDevice: the callback reads the PSG. */
+  SDL_PauseAudioDevice(audio_device, 0);
+#endif
   
   /*
    * Set up the modem.
@@ -2207,13 +2285,43 @@ int main(int argc, char **argv)
       else
         next_watchdog = 0;
       scanline++;
+
+#ifdef __MSDOS__
       if (scanline < 240)
         render_scanline(scanline);
+#else
+      /* Every line of the field: the vertical border and the overlays fall outside
+         the 240 visible ones. */
+      int vdp_irq = vdp_bridge_loop();
+
+      /* vdpint is the NABU's latched request, cleared by the status read in
+         port_read().  A guest that masks the VDP instead of acknowledging it would
+         leave the latch stuck, so release it on that too. */
+      if (vdp_irq && !vdpint)
+      {
+        vdpint = 1;
+        update_interrupts();
+      }
+      else if (vdpint && !vdp_bridge_irq_enabled())
+      {
+        vdpint = 0;
+        update_interrupts();
+      }
+#endif
+
       if (scanline > 261)
       {
         scanline = 0;
+
+#ifndef __MSDOS__
+        /* Not per line: the engine runs a line behind this counter and would paint
+           over the LEDs. */
+        render_leds();
+#endif
+
         next_frame();
 
+#ifdef __MSDOS__
         if (vrEmuTms9918RegValue(vdp, TMS_REG_1) & 0x20)
         {
           if (vdpint == 0)
@@ -2222,6 +2330,9 @@ int main(int argc, char **argv)
             update_interrupts();
           }
         }
+#else
+        vdp_bridge_flush();
+#endif
       }
       next += 228;
     }
@@ -2240,8 +2351,16 @@ int main(int argc, char **argv)
   if (lpt) fclose(lpt);
   if (gotmodem)
     modem_deinit();
+#ifndef __MSDOS__
+  SDL_PauseAudioDevice(audio_device, 1);
+#endif
   PSG_delete(psg);
+  psg = NULL;
+#ifdef __MSDOS__
   vrEmuTms9918Destroy(vdp);
+#else
+  vdp_bridge_shutdown();
+#endif
   free(display);
   disksys_deinit();
 #ifndef __MSDOS__
