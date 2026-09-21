@@ -2223,7 +2223,7 @@ int main(int argc, char **argv)
   if (inita)
    disksys_insert(0, inita);
   if (initb)
-   disksys_insert(1, inita);
+   disksys_insert(1, initb);
 
   /*
    * Get ready to start the emulated Z80.
