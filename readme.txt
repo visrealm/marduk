@@ -67,6 +67,7 @@ Key bindings
   F3 = Reset
   F6 = Toggle whether arrows and space route to the keyboard or P1 joystick.
   F10 = Exit
+  F11 = Toggle fullscreen
   Ins and Del = Yes and No
   PgUp and PgDn = << and >>
 
@@ -114,6 +115,21 @@ Selecting a VDP
 
   The MS-DOS target keeps vrEmuTms9918 and is a TMS9918A only; -V and -9
   report that and are otherwise ignored there.
+
+Display
+=======
+
+  The frame is 640x480 whatever the window is.  The MS-DOS target renders
+  straight to VGA memory and reports these as ignored.
+
+  -r  Resizable window, opened at the largest whole multiple of the frame
+      that fits the display, up to 2x.  This is the default.
+  -R  Fixed window.
+  -i  Whole scaling factors only, so pixel and scanline thickness stay even.
+      The surplus becomes border.  This is the default.
+  -I  Any factor: the picture fills the window's 4:3 box.  Aspect is still
+      kept - the odd dimension out becomes border, never stretch.
+  -s  Filter the scaling, for a softer picture at a fractional factor.
 
 Using a Virtual Adapter (Cable Modem Emulator)
 ==============================================
