@@ -1,3 +1,62 @@
+0.28 (26092120)
+===============
+
+  * Added -V pico9918pro, the RP2350 board: 80-column text at a byte a pixel,
+    so the tile palette select, ECM and the bitmap layer reach TEXT80.  It
+    answers software exactly as a pico9918 does.
+  * The configuration block records which board the emulated VDP is, so an
+    existing pico9918.cfg is reset to defaults once.
+  * pico9918.cfg is no longer created at tms9918a or f18a, neither of which
+    has a config port.
+  * F3 resets the VDP along with the CPU.
+  * A firmware-flash request reports itself unsupported rather than leaving
+    the guest waiting on the busy bit.
+  * The window title carries the VDP, the BIOS and whichever disks are
+    mounted.
+  * -b mounts its image in drive B.  It was mounting drive A's a second time.
+  * The audio device no longer runs before the PSG exists or after it is
+    freed.
+  * The MS-DOS build's vrEmuTms9918 is back to the copy upstream carries.
+
+0.27 (26090223)
+================
+
+  * pico9918-core now drives the whole output frame through
+    pico9918_frame_output_line: vertical scaling, double rows, the overlay on
+    border lines and the CRT-scanlines dim are all the library's, and the host
+    presents a fixed 480 lines in every mode.
+  * CRT scanlines take effect.  The setting was stored in the configuration
+    block before but never applied, so a block with it set now dims every
+    second line where it previously did nothing.
+  * 80-column text renders at full width and in the right colours.  The line is
+    a byte a pixel once unlocked, and both its width and its palette lookup
+    were wrong for that.
+  * F18A and PICO9918 detection is reliable.  A GPU program now runs from the
+    register write that arms it rather than at the next scanline, so a probe
+    that writes a short self-modifying program and reads the result straight
+    back cannot miss it.  It failed at random before.
+  * MARDUK_GPU_IPS sets the rate the library paces the GPU at, rather than a
+    per-scanline instruction budget here.
+  * One pixel format throughout: the library renders a 16-bit pixel and marduk
+    converts to ARGB8888 on the way to the texture.
+  * The window is resizable, and opens at the largest whole multiple of the
+    frame that fits the display.  -R keeps it fixed, -I allows any scaling
+    factor rather than whole ones, -s filters the scaling, and F11 toggles
+    fullscreen.
+
+0.26f (26090216)
+================
+
+  * VDP is now rendered by pico9918-core, the only VDP in non-DOS builds.
+  * Added -V <chip> to select the VDP personality at runtime: tms9918a
+    (default), f18a or pico9918.  -9 is shorthand for -V pico9918.
+    MARDUK_VDP_CHIP sets the same thing from the environment.
+  * At pico9918, the 256-byte configuration block is persisted to
+    pico9918.cfg in the working directory.
+  * MARDUK_GPU_IPS sets the emulated GPU instruction rate (default
+    10000000).
+  * The MS-DOS build keeps vrEmuTms9918 and remains TMS9918A-only.
+
 0.26e (23051218)
 ================
 
