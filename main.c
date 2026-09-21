@@ -1592,6 +1592,14 @@ void audio_callback(void *userdata, Uint8 *stream, int len)
 {
   int i;
   int16_t sample;
+
+  /* The device outlives the PSG at both ends of the run. */
+  if (!psg)
+  {
+    memset(stream, 0, len);
+    return;
+  }
+
   for (i = 0; i < len; i += 2) {
     sample = PSG_calc(psg);
     stream[i] = sample & 0xff;
@@ -1978,7 +1986,6 @@ int main(int argc, char **argv)
   audio_spec.callback = audio_callback;
 
   audio_device = SDL_OpenAudioDevice(NULL, 0, &audio_spec, NULL, 0);
-  SDL_PauseAudioDevice(audio_device, 0);
 #endif
 
   /*
@@ -2001,6 +2008,11 @@ int main(int argc, char **argv)
   }
   PSG_setVolumeMode(psg, 2);
   PSG_reset(psg);
+
+#ifndef __MSDOS__
+  /* Not at SDL_OpenAudioDevice: the callback reads the PSG. */
+  SDL_PauseAudioDevice(audio_device, 0);
+#endif
   
   /*
    * Set up the modem.
@@ -2165,7 +2177,11 @@ int main(int argc, char **argv)
   if (lpt) fclose(lpt);
   if (gotmodem)
     modem_deinit();
+#ifndef __MSDOS__
+  SDL_PauseAudioDevice(audio_device, 1);
+#endif
   PSG_delete(psg);
+  psg = NULL;
   vrEmuTms9918Destroy(vdp);
   free(display);
   disksys_deinit();
