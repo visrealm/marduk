@@ -172,6 +172,13 @@ int ttyup;
 SDL_Window *screen;
 SDL_Renderer *renderer;
 SDL_Texture *texture;
+
+/* Defaults; -R, -I and -s respectively change them. */
+int resizable = 1;
+int integer_scale = 1;
+int smooth_scale = 0;
+
+int fullscreen;
 SDL_AudioDeviceID audio_device;
 SDL_AudioSpec audio_spec;
 SDL_GameController *pad;
@@ -1116,6 +1123,12 @@ void keyboard_poll(void)
         case SDLK_F10: /* F10 - also exit */
          death_flag = 1;
          break;
+        case SDLK_F11: /* F11 - fullscreen */
+         fullscreen=!fullscreen;
+         SDL_SetWindowFullscreen(screen,
+                                 fullscreen?SDL_WINDOW_FULLSCREEN_DESKTOP:0);
+         diag_printf ("Fullscreen is now %s\n", fullscreen?"ON":"OFF");
+         break;
        }
       break;
      case SDL_QUIT: /* someone killed our window */
@@ -1797,7 +1810,7 @@ int main(int argc, char **argv)
    * You can use actual Nabu firmware with the -4, -8 and -B switches.
    */
   bios = OPENNABU;
-  while (-1 != (e = getopt(argc, argv, "48B:jJS:P:Np:a:b:x:")))
+  while (-1 != (e = getopt(argc, argv, "48B:jJS:P:Np:a:b:x:rRiIs")))
   {
    switch (e)
    {
@@ -1807,6 +1820,25 @@ int main(int argc, char **argv)
     case '8':
       bios = ROMFILE2;
       break;
+    case 'r': /* -r/-R - window resizable or fixed */
+    case 'R':
+    case 'i': /* -i/-I - whole scaling factors or any */
+    case 'I':
+    case 's': /* -s - filter the scaling */
+#ifdef __MSDOS__
+     fprintf(stderr, "%s: the DOS build renders straight to VGA; -%c ignored\n",
+             argv[0], e);
+#else
+     switch (e)
+     {
+      case 'r': resizable=1; break;
+      case 'R': resizable=0; break;
+      case 'i': integer_scale=1; break;
+      case 'I': integer_scale=0; break;
+      case 's': smooth_scale=1; break;
+     }
+#endif
+     break;
     case 'j':
      dojoy=0;
      break;
@@ -1841,7 +1873,7 @@ int main(int argc, char **argv)
     default:
       fprintf(stderr, 
               "usage: %s [-4 | 8 | -B filename] [-S server] [-P port]"
-              " [-p file]\n",
+              " [-p file] [-r | -R] [-i | -I] [-s]\n",
               argv[0]);
       return 1;
    }
@@ -1926,19 +1958,41 @@ int main(int argc, char **argv)
    * Now ready to set up our window and the necessary resources to actually do
    * stuff with it.  If at any time this process fails, die screaming.
    */
-  screen = SDL_CreateWindow("Marduk", SDL_WINDOWPOS_UNDEFINED,
-                            SDL_WINDOWPOS_UNDEFINED, 640, 480, 0);
+  /* XXX: a plain SDL_SetHint loses to SDL_RENDER_SCALE_QUALITY in the environment. */
+  SDL_SetHintWithPriority(SDL_HINT_RENDER_SCALE_QUALITY,
+                          smooth_scale ? "1" : "0", SDL_HINT_OVERRIDE);
+
+  /* The 64 allows for the title bar and borders, which are not ours to measure. */
+  {
+    SDL_Rect usable;
+    int scale = 2;
+
+    if (SDL_GetDisplayUsableBounds(0, &usable) == 0)
+      while (scale > 1 &&
+             (640 * scale > usable.w || 480 * scale + 64 > usable.h))
+        --scale;
+
+    screen = SDL_CreateWindow("Marduk", SDL_WINDOWPOS_UNDEFINED,
+                              SDL_WINDOWPOS_UNDEFINED, 640 * scale, 480 * scale,
+                              resizable ? SDL_WINDOW_RESIZABLE : 0);
+  }
   if (!screen)
   {
     fatal_diag(2, "FATAL: Could not create display");
     return 2;
   }
+
+  /* Below 1x, SDL clamps the integer factor to 1 and clips the edges off. */
+  SDL_SetWindowMinimumSize(screen, 640, 480);
   renderer = SDL_CreateRenderer(screen, -1, 0);
   if (!renderer)
   {
     fatal_diag(2, "FATAL: Could not set up renderer");
     return 2;
   }
+
+  SDL_RenderSetLogicalSize(renderer, 640, 480);
+  SDL_RenderSetIntegerScale(renderer, integer_scale ? SDL_TRUE : SDL_FALSE);
   texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
                               SDL_TEXTUREACCESS_STREAMING, 640, 480);
   if (!texture)
