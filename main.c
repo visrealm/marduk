@@ -523,9 +523,18 @@ void update_interrupts()
 char keyboard_buffer[256];
 uint8_t keyboard_buffer_write_ptr = 0;
 uint8_t keyboard_buffer_read_ptr = 0;
+unsigned keyboard_buffer_drops = 0;
 
 void keyboard_buffer_put(uint8_t code)
 {
+  /* One short of the read pointer: meeting it would read as empty. */
+  if (((uint8_t)(keyboard_buffer_write_ptr + 1)) == keyboard_buffer_read_ptr)
+  {
+    if (!(keyboard_buffer_drops++ & 0xFF))
+      diag_printf("Keyboard buffer full, dropping codes (%u so far)\n",
+                  keyboard_buffer_drops);
+    return;
+  }
   keyboard_buffer[keyboard_buffer_write_ptr++] = code;
 }
 
@@ -2428,6 +2437,8 @@ int main(int argc, char **argv)
 
   /* Clean up and exit properly. */
   printf("Shutting down emulation\n");
+  if (keyboard_buffer_drops)
+    printf("Keyboard buffer dropped %u code(s)\n", keyboard_buffer_drops);
   if (lpt) fclose(lpt);
   if (gotmodem)
     modem_deinit();
