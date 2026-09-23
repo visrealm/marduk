@@ -1,3 +1,18 @@
+0.28a (26092316)
+================
+
+  * -t starts the emulation unthrottled and F8 toggles it, for getting through a
+    boot or an HCCA load.  The title bar carries [TURBO] while it is on.
+  * Unthrottled, the machine still keeps real time whenever the guest is waiting
+    on the HCCA.  The loader counts its timeouts in Z80 cycles, so running ahead
+    of the adapter would expire a wait the hardware would have ridden out.
+  * The virtual modem stops reading a peer that has hung up.  A closed socket
+    selects readable forever, and the bytes it returned were stale.
+  * Nagle is off on the modem socket, which sends a byte at a time, and the
+    socket is closed with FIN rather than the RST an unread receive queue forces.
+  * A reset drops whatever the adapter had already sent.  On the real machine
+    that data was on a wire with nowhere to sit; TCP is what makes it survive.
+
 0.28 (26092120)
 ===============
 
