@@ -53,6 +53,7 @@
 # ifdef __MSDOS__
 #  include <tcp.h>
 # else
+#  include <netinet/tcp.h>
 #  define closesocket close /* BSD Socket API does not distinguish */
 # endif
 #endif
@@ -67,8 +68,10 @@
 #ifdef _WIN32
 static SOCKET mosock;
 static int wsa_started;
+# define MODEM_SHUT_WR SD_SEND
 #else
 static int mosock;
+# define MODEM_SHUT_WR SHUT_WR
 #endif
 static int status;
 
@@ -97,17 +100,53 @@ uint8_t modem_bytes_available (void)
  {
   return 0;
  }
- return 1;    
+ return 1;
 }
 
 uint8_t modem_read (uint8_t *b)
 {
+ int e;
+
  if (!status) return 0;
  if (modem_bytes_available()) {
-   recv(mosock, b, 1, 0);
-   return 1;
+   e=recv(mosock, b, 1, 0);
+   if (e==1) return 1;
+   /* A closed peer selects readable forever, so stop asking. */
+   fprintf (stderr, "Virtual modem hung up\n");
+   status=0;
+   return 0;
  }
  return 0;
+}
+
+/*
+ * Reset does not reach the adapter, so anything it had already sent stays queued
+ * and the next boot reads it as the head of its own stream.  On the real machine
+ * that data was on a wire with nowhere to sit, so dropping it is what the
+ * hardware does - TCP is what makes it survive.
+ */
+void modem_flush (void)
+{
+ uint8_t discard[512];
+ int rounds;
+
+ if (!status) return;
+
+ /* Bounded: a peer that is mid-transfer can supply bytes as fast as we take them. */
+ for (rounds=0; rounds<64; rounds++)
+ {
+  int e;
+
+  if (!modem_bytes_available()) return;
+
+  e=recv(mosock, discard, sizeof discard, 0);
+  if (e<1)
+  {
+   fprintf (stderr, "Virtual modem hung up\n");
+   status=0;
+   return;
+  }
+ }
 }
 
 void modem_write (uint8_t data)
@@ -199,16 +238,52 @@ int modem_init (char *server, char *port)
 #endif
   return -1;
  }
+ /*
+  * The HCCA is a byte at a time, so every send() is one byte.  Nagle holds each
+  * one back until the previous is acknowledged, and the delayed ACK at the other
+  * end means that wait is tens of milliseconds - far longer than the loader's own
+  * timeouts, and longer still in guest time when the throttle is off.
+  */
+#ifdef TCP_NODELAY
+ {
+  int one=1;
+  if (setsockopt(mosock, IPPROTO_TCP, TCP_NODELAY, (const char *)&one,
+                 sizeof one))
+   fprintf (stderr, "Warning: could not disable Nagle on the modem socket\n");
+ }
+#endif
+
  printf ("Connection to virtual modem succeeded\n");
  status=1;
- 
+
  return 0;
 }
 
 void modem_deinit (void)
 {
+ uint8_t discard[512];
+ int rounds;
+
  if (!status) return;
  printf ("Shutting down virtual modem.\n");
+
+ /*
+  * Closing a socket whose receive queue still holds data makes the stack send RST
+  * instead of FIN, and the adapter then has to recover from an aborted connection
+  * before it will serve the next one.  The guest almost never reads the tail of a
+  * load, so that queue is rarely empty.  FIN first, then take what is left.
+  */
+ shutdown(mosock, MODEM_SHUT_WR);
+ for (rounds=0; rounds<64; rounds++)
+ {
+  int e;
+
+  if (!modem_bytes_available()) break;
+  e=recv(mosock, discard, sizeof discard, 0);
+  if (e<1) break;
+ }
+ status=0;
+
  closesocket(mosock);
 #ifdef _WIN32
  if (wsa_started) WSACleanup();

@@ -30,6 +30,7 @@ void modem_deinit (void);
 
 uint8_t modem_read (uint8_t *b);
 void modem_write (uint8_t);
+void modem_flush (void);
 uint8_t modem_bytes_available (void);
 
 #endif /* H_MODEM */
