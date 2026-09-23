@@ -49,7 +49,7 @@ Tips:
 Place the desired ROM alongside the executable or use flags:
 - Default ROM: just run `marduk`.
 - Custom ROM: `marduk -B mygame.bin`.
-- Other options: `-4`, `-8`, `-V <chip>` (VDP, see below), `-9`, `-S <server>`, `-P <port>`, `-p <lptfile>`, `-a <diskA>`, `-b <diskB>`, `-x <cpm exec>`, `-j/-J` to toggle joystick routing.
+- Other options: `-4`, `-8`, `-V <chip>` (VDP, see below), `-9`, `-S <server>`, `-P <port>`, `-p <lptfile>`, `-a <diskA>`, `-b <diskB>`, `-x <cpm exec>`, `-j/-J` to toggle joystick routing, `-t` to start unthrottled.
 
 ## Key bindings
 
@@ -57,6 +57,7 @@ Prior to version 1.0, some of these may be subject to change.
 
 - `F3` = Reset
 - `F6` = Toggle whether arrows and space route to the keyboard or P1 joystick.
+- `F8` = Toggle the speed throttle. Unthrottled, the machine runs as fast as the host manages, which is mostly useful for getting through a boot or an HCCA load.
 - `F10` = Exit
 - `F11` = Toggle fullscreen
 - `Ins` and `Del` = Yes and No

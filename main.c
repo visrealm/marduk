@@ -194,6 +194,17 @@ unsigned long long next_fire;
 struct timespec timespec;
 #endif
 
+/* Run the machine as fast as the host allows, for loading over the HCCA. */
+int unthrottled;
+void throttle_resync (void);
+
+/* Scanlines left during which an HCCA transaction counts as in flight, and whether
+   the socket is currently dry.  The ROM times its HCCA waits in Z80 cycles, so
+   running emulated time ahead of the adapter shrinks a timeout that real hardware
+   would ride out - turbo has to pace itself whenever the guest is waiting on it. */
+unsigned hcca_recent;
+int hcca_dry;
+
 #ifdef _WIN32
 LARGE_INTEGER currenttime,throttlerate;
 long long wantedtime, looptimedesired;
@@ -579,6 +590,7 @@ uint8_t port_read(z80 *mycpu, uint8_t port)
       t = modem_read(&b);
       if (t)
       {
+        hcca_recent = 15720u * 2u;
         hccarint = 0;
         update_interrupts();
         return b;
@@ -805,6 +817,8 @@ void keyboard_poll(void)
  if (k==0x4400) death_flag=1;
 }
 #else
+static void refresh_window_title (void);
+
 void add_gamecontroller(int joystick_index)
 {
     if (joystick != NULL)
@@ -1204,6 +1218,13 @@ void keyboard_poll(void)
          trace=!trace;
          diag_printf ("CPU Trace is now %s\n", trace?"ON":"OFF");
          break;
+        case SDLK_F8: /* F8 - run unthrottled */
+         unthrottled=!unthrottled;
+         /* Without this the backlog would be spent busy-waiting to catch up. */
+         if (!unthrottled) throttle_resync();
+         refresh_window_title();
+         diag_printf ("Throttle is now %s\n", unthrottled?"OFF":"ON");
+         break;
 #ifdef DEBUG
         /*
          * F9 - creates a command line to load a file.
@@ -1294,9 +1315,16 @@ void keyboard_poll(void)
  */
 #ifdef _WIN32
 /* Sloppy - from modapple */
+void throttle_resync (void)
+{
+ QueryPerformanceCounter(&currenttime);
+ wantedtime=currenttime.QuadPart+looptimedesired;
+}
+
 void throttle (void)
 {
-  
+ if (unthrottled && !(hcca_recent && hcca_dry)) return;
+
  QueryPerformanceCounter(&currenttime);
  while (currenttime.QuadPart<wantedtime)
  {
@@ -1307,14 +1335,26 @@ void throttle (void)
 }
 #else
 # ifdef __MSDOS__
+void throttle_resync (void)
+{
+}
+
 void throttle (void)
 {
 }
 # else
 /* POSIX version */
+void throttle_resync (void)
+{
+ clock_gettime(CLOCK_REALTIME, &timespec);
+ next_fire = timespec.tv_nsec + FIRE_TICK;
+}
+
 void throttle (void)
 {
  struct timespec n;
+
+ if (unthrottled && !(hcca_recent && hcca_dry)) return;
 
  clock_gettime(CLOCK_REALTIME, &timespec);
  n.tv_sec = 0;
@@ -1531,6 +1571,17 @@ void next_frame(void)
 #else
 void next_frame(void)
 {
+  /* Unthrottled, the guest makes frames faster than any display can show them,
+     and presenting each one would cost more than the emulation it is racing. */
+  if (unthrottled)
+  {
+    static Uint32 last_present;
+    Uint32 now = SDL_GetTicks();
+
+    if ((now - last_present) < 16) return;
+    last_present = now;
+  }
+
   SDL_UpdateTexture(texture, 0, display, 640 * sizeof(uint32_t));
   SDL_RenderClear(renderer);
   SDL_RenderCopy(renderer, texture, 0, 0);
@@ -1574,6 +1625,10 @@ static void init_cpu(void)
 static void reinit_cpu(void)
 {
   void *tmp;
+
+  /* Not in init_cpu(): at startup the socket is new, so there is nothing stale to
+     drop, and a greeting from the adapter would be all we managed to throw away. */
+  if (gotmodem) modem_flush();
 
   tmp = cpu.userdata;
   init_cpu();
@@ -1889,16 +1944,28 @@ static const char *base_name (char *path)
  return path;
 }
 
-/* What was chosen at startup; none of it changes while we run. */
-static void set_window_title (char *bios, char *diska, char *diskb)
+static char *title_bios, *title_diska, *title_diskb;
+
+static void refresh_window_title (void)
 {
  char title[256];
 
- snprintf (title, sizeof(title), "Marduk " VERSION " - %s - %s%s%s%s%s",
-           vdp_chip_name(vdp_chip), base_name(bios),
-           diska?" - A: ":"", diska?base_name(diska):"",
-           diskb?" - B: ":"", diskb?base_name(diskb):"");
+ if (!screen) return;
+
+ snprintf (title, sizeof(title), "Marduk " VERSION " - %s - %s%s%s%s%s%s",
+           vdp_chip_name(vdp_chip), base_name(title_bios),
+           title_diska?" - A: ":"", title_diska?base_name(title_diska):"",
+           title_diskb?" - B: ":"", title_diskb?base_name(title_diskb):"",
+           unthrottled?"  [TURBO]":"");
  SDL_SetWindowTitle (screen, title);
+}
+
+static void set_window_title (char *bios, char *diska, char *diskb)
+{
+ title_bios=bios;
+ title_diska=diska;
+ title_diskb=diskb;
+ refresh_window_title();
 }
 #endif
 
@@ -1952,7 +2019,7 @@ int main(int argc, char **argv)
   }
 #endif
 
-  while (-1 != (e = getopt(argc, argv, "489B:jJS:P:NV:p:a:b:x:rRiIs")))
+  while (-1 != (e = getopt(argc, argv, "489B:jJS:P:NV:p:a:b:x:rRiIst")))
   {
    switch (e)
    {
@@ -2032,12 +2099,19 @@ int main(int argc, char **argv)
     case 'x':
       cpmexec = optarg;
       break;
+    case 't':
+#ifdef __MSDOS__
+     fprintf(stderr, "%s: the DOS build never throttles; -t ignored\n", argv[0]);
+#else
+     unthrottled=1;
+#endif
+     break;
     default:
       fprintf(stderr, 
               "usage: %s [-4 | 8 | -B filename]"
               " [-V tms9918a|f18a|pico9918|pico9918pro] [-9]"
               " [-S server] [-P port]"
-              " [-p file] [-r | -R] [-i | -I] [-s]\n",
+              " [-p file] [-r | -R] [-i | -I] [-s] [-t]\n",
               argv[0]);
       return 1;
    }
@@ -2347,11 +2421,16 @@ int main(int argc, char **argv)
       
       /* if there are bytes available in the modem,
        generate the buffer ready interrupt */
+      if (hcca_recent) hcca_recent--;
+
       if (modem_bytes_available())
       {
+        hcca_dry = 0;
         hccarint = 1;
         update_interrupts();
       }
+      else
+        hcca_dry = 1;
 
       if (!keyboard_buffer_empty() && !keybdint) 
       {
